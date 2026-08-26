@@ -1,0 +1,14 @@
+{
+  "job_id": "job_9f8e7d6c",
+  "session_id": "lesson-grade8-science-photosynthesis",
+  "job_type": "chat",
+  "status": "completed",
+  "created_at": "2026-08-26T08:00:00Z",
+  "updated_at": "2026-08-26T08:01:00Z",
+  "progress": 100,
+  "result": {
+    "response": "Done"
+  },
+  "error": null,
+  "metadata": null
+}

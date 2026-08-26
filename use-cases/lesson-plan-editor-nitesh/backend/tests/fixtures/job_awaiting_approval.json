@@ -1,0 +1,33 @@
+{
+  "job_id": "job_9f8e7d6c",
+  "session_id": "lesson-grade8-science-photosynthesis",
+  "job_type": "chat",
+  "status": "awaiting_approval",
+  "created_at": "2026-08-26T08:00:00Z",
+  "updated_at": "2026-08-26T08:00:30Z",
+  "progress": 80,
+  "result": null,
+  "error": null,
+  "metadata": {
+    "awaiting_kind": "change_review",
+    "pending_changes": [
+      {
+        "change_id": "ch_1",
+        "operation": "edit",
+        "chunk_id": "550e8400-e29b-41d4-a716-446655440000",
+        "old_html": "<p>Original section 3 content...</p>",
+        "new_html": "<p>Updated content with GDPR compliance...</p>",
+        "ai_explanation": "Added GDPR data processing requirements"
+      },
+      {
+        "change_id": "ch_2",
+        "operation": "create",
+        "chunk_id": null,
+        "insert_after_chunk_id": "550e8400-e29b-41d4-a716-446655440001",
+        "old_html": null,
+        "new_html": "<h2>Assessment</h2><p>Exit slip...</p>",
+        "ai_explanation": "Added missing canonical Assessment section"
+      }
+    ]
+  }
+}
