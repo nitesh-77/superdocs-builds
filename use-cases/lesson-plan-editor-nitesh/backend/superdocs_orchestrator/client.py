@@ -9,6 +9,11 @@ lesson-plan editor orchestration flow:
 * :meth:`SuperDocsClient.start_chat_job` — kick off an async chat job.
 * :meth:`SuperDocsClient.get_job` / :meth:`SuperDocsClient.wait_for_terminal`
   — poll the job until it reaches a terminal state.
+* :meth:`SuperDocsClient.approve_change` / :meth:`SuperDocsClient.deny_change`
+  / :meth:`SuperDocsClient.submit_decisions` — submit human decisions on
+  proposed changes so an ``awaiting_approval`` job resumes.
+* :meth:`SuperDocsClient.export_document` — download a session document as
+  a binary file (docx / pdf / html).
 
 Human-in-the-loop (HITL) flow
 -----------------------------
@@ -24,8 +29,9 @@ looking at:
   approved/rejected per change.
 
 ``awaiting_approval`` is deliberately **not** treated as terminal by
-:meth:`SuperDocsClient.wait_for_terminal`; approval submission (approve /
-reject endpoints) lands in issue #4 and will resume the job afterwards.
+:meth:`SuperDocsClient.wait_for_terminal`; approval submission via
+:meth:`SuperDocsClient.approve_change` / :meth:`SuperDocsClient.deny_change`
+resumes the job afterwards.
 
 Transport injection
 -------------------
@@ -38,9 +44,10 @@ network access. When omitted, a plain client is created internally.
 
 from __future__ import annotations
 
+import json
 import os
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -48,10 +55,13 @@ import httpx
 
 from .exceptions import JobFailedError, SuperDocsError
 from .models import (
+    ChangeDecision,
+    ExportFormat,
     JobSnapshot,
     PendingChange,
     UploadedDocument,
     parse_change_operation,
+    parse_export_format,
     parse_job_status,
 )
 
@@ -139,6 +149,65 @@ class SuperDocsClient:
         if not isinstance(payload, dict):
             raise SuperDocsError("Expected a JSON object from SuperDocs API")
         return payload
+
+    @staticmethod
+    def _extract_pending_changes(
+        metadata: Mapping[str, Any],
+    ) -> tuple[PendingChange, ...]:
+        """Pull pending changes out of job ``metadata``.
+
+        Tolerates three payload shapes seen in the wild:
+
+        * ``metadata["pending_changes"]`` as a plain array (the normal case).
+        * ``metadata["pending_changes"]`` as a JSON-encoded string — the
+          SuperDocs SSE guide shows change content arriving double-encoded,
+          so it is ``json.loads``-ed once more before iterating.
+        * ``metadata["proposed_change_batch"]`` fallback (used only when
+          ``pending_changes`` is absent/``None``): either a dict whose
+          ``"content"`` value is a JSON string containing
+          ``{"changes": [...]}``, or itself a JSON string of that shape.
+        """
+        raw_changes: Any = metadata.get("pending_changes")
+        if raw_changes is None:
+            batch: Any = metadata.get("proposed_change_batch")
+            if isinstance(batch, str):
+                try:
+                    batch = json.loads(batch)
+                except json.JSONDecodeError as e:
+                    raise SuperDocsError(
+                        f"Malformed encoded pending changes from SuperDocs API: {e}"
+                    ) from e
+            if isinstance(batch, Mapping):
+                content = batch.get("content")
+                if isinstance(content, str):
+                    try:
+                        content = json.loads(content)
+                    except json.JSONDecodeError as e:
+                        raise SuperDocsError(
+                            f"Malformed encoded pending changes from SuperDocs API: {e}"
+                        ) from e
+                if isinstance(content, Mapping):
+                    raw_changes = content.get("changes")
+                elif "changes" in batch:
+                    raw_changes = batch["changes"]
+        if isinstance(raw_changes, str):
+            try:
+                raw_changes = json.loads(raw_changes)
+            except json.JSONDecodeError as e:
+                raise SuperDocsError(
+                    f"Malformed encoded pending changes from SuperDocs API: {e}"
+                ) from e
+        return tuple(
+            PendingChange(
+                change_id=change["change_id"],
+                operation=parse_change_operation(change["operation"]),
+                chunk_id=change.get("chunk_id"),
+                old_html=change.get("old_html"),
+                new_html=change.get("new_html"),
+                ai_explanation=change.get("ai_explanation"),
+            )
+            for change in (raw_changes or ())
+        )
 
     # ------------------------------------------------------------------
     # documents & templates
@@ -232,18 +301,7 @@ class SuperDocsClient:
         )
         payload = self._parse_json_object(self._request(request))
         metadata = payload.get("metadata") or {}
-        raw_changes = metadata.get("pending_changes")
-        pending_changes = tuple(
-            PendingChange(
-                change_id=change["change_id"],
-                operation=parse_change_operation(change["operation"]),
-                chunk_id=change.get("chunk_id"),
-                old_html=change.get("old_html"),
-                new_html=change.get("new_html"),
-                ai_explanation=change.get("ai_explanation"),
-            )
-            for change in (raw_changes or ())
-        )
+        pending_changes = self._extract_pending_changes(metadata)
         awaiting_kind = metadata.get("awaiting_kind")
         return JobSnapshot(
             job_id=str(payload["job_id"]),
@@ -267,7 +325,8 @@ class SuperDocsClient:
 
         Terminal statuses are ``completed``, ``failed``, and ``cancelled``.
         ``awaiting_approval`` is *not* terminal: the loop continues past it
-        (approval submission arrives in issue #4).
+        (submit approvals via :meth:`approve_change` / :meth:`deny_change` /
+        :meth:`submit_decisions`).
 
         Raises:
             TimeoutError: If ``timeout`` seconds elapse first.
@@ -287,6 +346,137 @@ class SuperDocsClient:
                     f"{timeout} seconds (last status: {snapshot.status})"
                 )
             time.sleep(poll_interval)
+
+    # ------------------------------------------------------------------
+    # approvals (HITL change review)
+    # ------------------------------------------------------------------
+
+    def _submit_approval(self, session_id: str, body: dict[str, Any]) -> None:
+        """POST an ``ApprovalRequest`` body to the session approve endpoint."""
+        request = self._build_request(
+            "POST",
+            f"/v1/chat/{session_id}/approve",
+            json_body=body,
+        )
+        self._parse_json_object(self._request(request))
+
+    def _submit_single_decision(
+        self,
+        session_id: str,
+        job_id: str,
+        change_id: str,
+        *,
+        approved: bool,
+        feedback: str | None,
+    ) -> None:
+        """Build and POST a single-change ``ApprovalRequest`` body."""
+        body: dict[str, Any] = {
+            "job_id": job_id,
+            "change_id": change_id,
+            "approved": approved,
+        }
+        if feedback is not None:
+            body["feedback"] = feedback
+        self._submit_approval(session_id, body)
+
+    def approve_change(
+        self,
+        session_id: str,
+        job_id: str,
+        change_id: str,
+        *,
+        feedback: str | None = None,
+    ) -> None:
+        """Approve a single proposed change.
+
+        The top-level ``approved: true`` is required by the API even in
+        single-change shape; omitting it yields HTTP 422.
+        """
+        self._submit_single_decision(
+            session_id, job_id, change_id, approved=True, feedback=feedback
+        )
+
+    def deny_change(
+        self,
+        session_id: str,
+        job_id: str,
+        change_id: str,
+        *,
+        feedback: str | None = None,
+    ) -> None:
+        """Deny a single proposed change, optionally with feedback."""
+        self._submit_single_decision(
+            session_id, job_id, change_id, approved=False, feedback=feedback
+        )
+
+    def submit_decisions(
+        self,
+        session_id: str,
+        job_id: str,
+        decisions: Sequence[ChangeDecision],
+    ) -> None:
+        """Submit a batch of per-change decisions in one request.
+
+        The top-level ``approved`` flag acts as the default for entries
+        lacking their own ``approved``; it is set to ``True`` only when
+        *every* decision approves.
+
+        Raises:
+            SuperDocsError: If ``decisions`` is empty.
+        """
+        if not decisions:
+            raise SuperDocsError(
+                "submit_decisions requires at least one ChangeDecision"
+            )
+        changes = []
+        for decision in decisions:
+            entry: dict[str, Any] = {
+                "change_id": decision.change_id,
+                "approved": decision.approved,
+            }
+            if decision.feedback is not None:
+                entry["feedback"] = decision.feedback
+            changes.append(entry)
+        self._submit_approval(
+            session_id,
+            {
+                "job_id": job_id,
+                "approved": all(d.approved for d in decisions),
+                "changes": changes,
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # export
+    # ------------------------------------------------------------------
+
+    def export_document(
+        self,
+        session_id: str,
+        output_format: ExportFormat,
+        output_path: Path,
+    ) -> Path:
+        """Export a session document and write the binary download to disk.
+
+        Args:
+            session_id: Session whose document should be exported.
+            output_format: One of ``"docx"``, ``"pdf"``, ``"html"``.
+            output_path: File the response bytes are written to. Parent
+                directories are not created.
+
+        Returns:
+            The ``output_path`` that was written.
+        """
+        parse_export_format(output_format)
+        request = self._build_request(
+            "POST",
+            "/v1/documents/export",
+            json_body={"session_id": session_id, "format": output_format},
+        )
+        response = self._request(request)
+        with open(output_path, "wb") as fh:
+            fh.write(response.content)
+        return output_path
 
 
 __all__ = ["SuperDocsClient", "PendingChange", "UploadedDocument"]

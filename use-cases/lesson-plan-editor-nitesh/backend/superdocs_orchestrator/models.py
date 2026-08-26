@@ -38,6 +38,11 @@ _JOB_STATUSES: frozenset[str] = frozenset(
 )
 _CHANGE_OPERATIONS: frozenset[str] = frozenset({"edit", "create", "delete"})
 
+ExportFormat = Literal["docx", "pdf", "html"]
+"""Document formats supported by :meth:`SuperDocsClient.export_document`."""
+
+_EXPORT_FORMATS: frozenset[str] = frozenset({"docx", "pdf", "html"})
+
 
 def parse_job_status(value: str) -> JobStatus:
     """Validate a raw status string, returning the typed literal.
@@ -60,6 +65,19 @@ def parse_change_operation(value: str) -> ChangeOperation:
         return cast(ChangeOperation, value)
     raise SuperDocsError(
         f"Unknown change operation from SuperDocs API: {value!r}"
+    )
+
+
+def parse_export_format(value: str) -> ExportFormat:
+    """Validate a raw export format string, returning the typed literal.
+
+    Raises:
+        SuperDocsError: If ``value`` is not a supported export format.
+    """
+    if value in _EXPORT_FORMATS:
+        return cast(ExportFormat, value)
+    raise SuperDocsError(
+        f"Unknown export format: {value!r}. Expected one of: docx, pdf, html"
     )
 
 
@@ -104,6 +122,15 @@ class PendingChange:
     old_html: str | None
     new_html: str | None
     ai_explanation: str | None
+
+
+@dataclass(frozen=True)
+class ChangeDecision:
+    """One per-change decision inside a batch approval submission."""
+
+    change_id: str
+    approved: bool
+    feedback: str | None = None
 
 
 @dataclass(frozen=True)

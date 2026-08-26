@@ -4,9 +4,17 @@ from __future__ import annotations
 
 from .client import SuperDocsClient
 from .exceptions import JobFailedError, SuperDocsError
-from .models import JobSnapshot, PendingChange, UploadedDocument
+from .models import (
+    ChangeDecision,
+    ExportFormat,
+    JobSnapshot,
+    PendingChange,
+    UploadedDocument,
+)
 
 __all__ = [
+    "ChangeDecision",
+    "ExportFormat",
     "JobFailedError",
     "JobSnapshot",
     "PendingChange",

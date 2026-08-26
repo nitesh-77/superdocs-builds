@@ -1,0 +1,15 @@
+{
+  "job_id": "job_9f8e7d6c",
+  "session_id": "lesson-grade8-science-photosynthesis",
+  "job_type": "chat",
+  "status": "awaiting_approval",
+  "created_at": "2026-08-26T08:00:00Z",
+  "updated_at": "2026-08-26T08:00:30Z",
+  "progress": 80,
+  "result": null,
+  "error": null,
+  "metadata": {
+    "awaiting_kind": "change_review",
+    "pending_changes": "[\n  {\n    \"change_id\": \"ch_1\",\n    \"operation\": \"edit\",\n    \"chunk_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"old_html\": \"<p>Original section 3 content...</p>\",\n    \"new_html\": \"<p>Updated content with GDPR compliance...</p>\",\n    \"ai_explanation\": \"Added GDPR data processing requirements\"\n  },\n  {\n    \"change_id\": \"ch_2\",\n    \"operation\": \"create\",\n    \"chunk_id\": null,\n    \"insert_after_chunk_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n    \"old_html\": null,\n    \"new_html\": \"<h2>Assessment</h2><p>Exit slip...</p>\",\n    \"ai_explanation\": \"Added missing canonical Assessment section\"\n  }\n]"
+  }
+}

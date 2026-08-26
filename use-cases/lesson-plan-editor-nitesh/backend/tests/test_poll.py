@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
 import pytest
 
 from conftest import _make_client
-from superdocs_orchestrator.exceptions import JobFailedError
+from superdocs_orchestrator.exceptions import JobFailedError, SuperDocsError
 from superdocs_orchestrator.models import PendingChange
 
 JOB_FIXTURES = [
@@ -79,6 +80,139 @@ def test_get_job_awaiting_approval_parses_pending_changes(
     )
     assert not hasattr(second, "insert_after_chunk_id")
     assert snapshot.awaiting_kind == "change_review"
+
+
+def test_get_job_double_parses_encoded_pending_changes(
+    fixture_loader: Any,
+) -> None:
+    payload: dict[str, Any] = fixture_loader("job_awaiting_approval_double_encoded.json")
+    assert isinstance(payload["metadata"]["pending_changes"], str)
+
+    client, router = _make_client()
+    with router:
+        router.get("/v1/jobs/job_9f8e7d6c").respond(json=payload)
+
+        snapshot = client.get_job("job_9f8e7d6c")
+
+    changes = snapshot.pending_changes
+    assert isinstance(changes, tuple)
+    assert len(changes) == 2
+    first, second = changes
+    assert first == PendingChange(
+        change_id="ch_1",
+        operation="edit",
+        chunk_id="550e8400-e29b-41d4-a716-446655440000",
+        old_html="<p>Original section 3 content...</p>",
+        new_html="<p>Updated content with GDPR compliance...</p>",
+        ai_explanation="Added GDPR data processing requirements",
+    )
+    assert second == PendingChange(
+        change_id="ch_2",
+        operation="create",
+        chunk_id=None,
+        old_html=None,
+        new_html="<h2>Assessment</h2><p>Exit slip...</p>",
+        ai_explanation="Added missing canonical Assessment section",
+    )
+
+
+def test_get_job_falls_back_to_proposed_change_batch() -> None:
+    change_dict: dict[str, Any] = {
+        "change_id": "ch_1",
+        "operation": "edit",
+        "chunk_id": "chunk-9",
+        "old_html": "<p>old</p>",
+        "new_html": "<p>new</p>",
+        "ai_explanation": "Tightened wording",
+    }
+    payload: dict[str, Any] = {
+        "job_id": "job_9f8e7d6c",
+        "session_id": "sess-1",
+        "status": "awaiting_approval",
+        "progress": 80,
+        "metadata": {
+            "awaiting_kind": "change_review",
+            "proposed_change_batch": {
+                "content": json.dumps({"changes": [change_dict]})
+            },
+        },
+    }
+
+    client, router = _make_client()
+    with router:
+        router.get("/v1/jobs/job_9f8e7d6c").respond(json=payload)
+
+        snapshot = client.get_job("job_9f8e7d6c")
+
+    changes = snapshot.pending_changes
+    assert len(changes) == 1
+    assert changes[0] == PendingChange(
+        change_id="ch_1",
+        operation="edit",
+        chunk_id="chunk-9",
+        old_html="<p>old</p>",
+        new_html="<p>new</p>",
+        ai_explanation="Tightened wording",
+    )
+
+
+def test_get_job_falls_back_to_string_encoded_proposed_change_batch() -> None:
+    change_dict: dict[str, Any] = {
+        "change_id": "ch_7",
+        "operation": "create",
+        "chunk_id": None,
+        "old_html": None,
+        "new_html": "<h2>Homework</h2>",
+        "ai_explanation": "Added homework section",
+    }
+    payload: dict[str, Any] = {
+        "job_id": "job_9f8e7d6c",
+        "session_id": "sess-1",
+        "status": "awaiting_approval",
+        "progress": 80,
+        "metadata": {
+            "awaiting_kind": "change_review",
+            # The whole batch itself arrives as a JSON-encoded string.
+            "proposed_change_batch": json.dumps({"changes": [change_dict]}),
+        },
+    }
+
+    client, router = _make_client()
+    with router:
+        router.get("/v1/jobs/job_9f8e7d6c").respond(json=payload)
+
+        snapshot = client.get_job("job_9f8e7d6c")
+
+    changes = snapshot.pending_changes
+    assert len(changes) == 1
+    assert changes[0] == PendingChange(
+        change_id="ch_7",
+        operation="create",
+        chunk_id=None,
+        old_html=None,
+        new_html="<h2>Homework</h2>",
+        ai_explanation="Added homework section",
+    )
+
+
+def test_get_job_malformed_encoded_pending_changes_raises_superdocs_error() -> None:
+    payload: dict[str, Any] = {
+        "job_id": "job_9f8e7d6c",
+        "session_id": "sess-1",
+        "status": "awaiting_approval",
+        "progress": 80,
+        "metadata": {
+            "awaiting_kind": "change_review",
+            "pending_changes": "{not valid json",
+        },
+    }
+
+    client, router = _make_client()
+    with router:
+        router.get("/v1/jobs/job_9f8e7d6c").respond(json=payload)
+
+        with pytest.raises(SuperDocsError):
+            client.get_job("job_9f8e7d6c")
 
 
 def test_get_job_awaiting_continue_prompt_has_no_pending_changes(
