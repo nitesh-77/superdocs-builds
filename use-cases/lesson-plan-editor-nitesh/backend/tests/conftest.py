@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 import respx
+from fastapi.testclient import TestClient
 
+from superdocs_api.app import create_app
 from superdocs_orchestrator.client import SuperDocsClient
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -41,3 +43,11 @@ def fixture_loader() -> Callable[[str], dict[str, Any]]:
 def http_client() -> httpx.Client:
     """A caller-constructed httpx.Client handed to SuperDocsClient via injection."""
     return httpx.Client(base_url=BASE_URL)
+
+
+@pytest.fixture()
+def api() -> Generator[tuple[TestClient, respx.MockRouter], None, None]:
+    """FastAPI TestClient backed by a mock-transport SuperDocsClient."""
+    client, router = _make_client()
+    with router:
+        yield TestClient(create_app(client=client)), router

@@ -248,6 +248,39 @@ class SuperDocsClient:
             version_id=payload.get("version_id"),
         )
 
+    def list_documents(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        include_preview: bool = False,
+        archived: bool = False,
+    ) -> dict[str, Any]:
+        """List documents from the SuperDocs Files list.
+
+        Args:
+            limit: Maximum number of documents to return.
+            offset: Pagination offset.
+            include_preview: Whether preview URLs are included.
+            archived: Whether archived documents are returned instead of
+                active ones.
+
+        Returns:
+            The parsed JSON object as-is (e.g. ``{"documents": [...],
+            "total": n}``).
+        """
+        request = self._build_request(
+            "GET",
+            "/v1/documents",
+            params={
+                "limit": str(limit),
+                "offset": str(offset),
+                "include_preview": "true" if include_preview else "false",
+                "archived": "true" if archived else "false",
+            },
+        )
+        return self._parse_json_object(self._request(request))
+
     def upload_template(self, file_path: Path) -> dict[str, Any]:
         """Upload a template file; returns the parsed JSON object as-is."""
         with file_path.open("rb") as fh:
