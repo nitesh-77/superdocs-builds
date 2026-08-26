@@ -11,9 +11,11 @@ from .models import (
     PendingChange,
     UploadedDocument,
 )
+from .titles import DocumentTitle, assemble_title, parse_title
 
 __all__ = [
     "ChangeDecision",
+    "DocumentTitle",
     "ExportFormat",
     "JobFailedError",
     "JobSnapshot",
@@ -21,4 +23,6 @@ __all__ = [
     "SuperDocsClient",
     "SuperDocsError",
     "UploadedDocument",
+    "assemble_title",
+    "parse_title",
 ]
