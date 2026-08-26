@@ -16,4 +16,4 @@ Word problems: read twice, identify the wholes vs parts, decide the operation fr
 
 Assessment: classwork exercise checked in the last ten minutes; exit slip with one comparison, one addition, one word problem; homework from textbook exercise; small quiz next Tuesday on operations.
 
-Extra: remind students the fraction wall stays glued inside their notebook cover. Extra-extra: the paper circle sets need to be counted back in at the end of the period or they vanish; last year three red circles disappeared forever and the activity was short one set per row for the rest of term. Probably trim this when making the real plan.
+Extra: remind students the fraction wall stays glued inside their notebook cover. Extra-extra: the paper circle sets need to be counted back in at the end of the period or they vanish; last year three red circles disappeared forever and the activity was short one set per row for the rest of term.

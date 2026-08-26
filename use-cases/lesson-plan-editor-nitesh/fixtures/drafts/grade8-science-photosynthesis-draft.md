@@ -26,9 +26,10 @@ copy the observation table while it cools.
 
 Also mention respiration happens at night too and plants don't "breathe in
 oxygen only in the day" — kill this misconception early because the tuition
-centre down the road teaches it wrong and half my class repeats it. Actually
-this whole paragraph about tuition centres is probably unnecessary detail for
-the plan itself but keep it here for now.
+centre down the road teaches it wrong and half my class repeats it. Their
+worksheets even have a diagram showing the plant breathing in oxygen through
+the stomata at night like lungs, which I keep meaning to photograph as a
+counter-example but never do.
 
 Ask oral questions at the end: define photosynthesis, why is a leaf green, what
 gas is released, why do we boil the leaf in spirit and not directly over flame.

@@ -1,9 +1,5 @@
 # Lesson Plan
 
-Class: {Class}
-Subject: {Subject}
-Chapter: {Chapter}
-
 ## Objectives
 
 By the end of this lesson, students will be able to:
